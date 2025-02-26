@@ -34,12 +34,12 @@ KEY_LOCK/VCC_PIN----|D9           A0|----CURRENT_PIN      1N4148  PP/CC
   //  GND
 
   // Proximity circuit GB/T
-  //  VCC
-  //  1K
-  //  PP    Btn pressed   voltage   adcval
-  //  680                 3.9v      [2710, 3610)
-  //  2K7
-  //  GND
+  //    VCC
+  //    1K
+  //    PP          not pressed: SW close, Vpp = 1.96v, adcval = 410
+  //  680/220---+   BTN pressed: SW open, Vpp = 4.88v, adcval = 1016
+  //     |      X   R4 not used: 2K7 for 16A or 3K3 for 32A
+  //    GND-----+
 
   // Proximity circuit Type 2
   //  VCC

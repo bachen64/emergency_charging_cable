@@ -2,57 +2,101 @@
 
 #include <WDT.h>
 
-uint8_t  g_PlugType;    // for main.cpp, J1772EVSEController::GetMaxCurrentCapacity() and J1772EVSEController::SetCurrentCapacity()
-uint8_t  g_PlugAmps;    // for main.cpp, BtnHandler::ChkBtn() in open_evse/main.cpp
-uint16_t g_BtnPressed;  // for Btn::read() in open_evse/main.cpp
+#define TEXTIFY(A) #A
+#define ESCAPEQUOTE(A) TEXTIFY(A)
+
+uint8_t  g_PlugType;        // for BtnHandler::ChkBtn() in open_evse/main.cpp
+uint8_t  g_CircuitRating;   // for BtnHandler::ChkBtn() in open_evse/main.cpp
+uint8_t  g_ContinuousLoad;  // for J1772EVSEController::GetMaxCurrentCapacity() and J1772EVSEController::SetCurrentCapacity()
+uint16_t g_ButtonPressed;   // for Btn::read() in open_evse/main.cpp
 
 static uint8_t evseState = EVSE_STATE_UNKNOWN;
+
+int getChar(FILE *fp)
+{
+  while (!Serial.available());
+  return Serial.read();
+}
+
+int putChar(char c, FILE *fp)
+{
+  if (c == '\n') putChar((char)'\r', fp);
+  Serial.write(c);
+  return 0;
+}
 
 void setup()
 {
   Serial.begin(115200);
+  fdevopen(putChar, getChar);
 
 #if defined(ECC_GB_T)
+  // GB/T 16A domestic: 0, 500,  8A/16A
+  // GB/T 16A CEE blue: 0, 500, 16A/16A
+  // GB/T 32A CEE blue: 0, 500,  8A/16A/20A/32A
   g_PlugType = 0;
-#if defined(ECC_32A)
-  g_PlugAmps = 32;
-  g_BtnPressed = 900;
-#else
-  g_PlugAmps = 16;
-  g_BtnPressed = 1800;
-#endif
-
+  #if defined(ECC_32A)
+    g_CircuitRating = 32;
+    g_ContinuousLoad = 32;
+  #else
+    g_CircuitRating = 16;
+    #if defined(ECC_16A_DOMESTIC)
+      g_ContinuousLoad = 8;
+    #else
+      g_ContinuousLoad = 16;
+    #endif
+  #endif
+  g_ButtonPressed = 500;
 #elif defined(ECC_TYPE_2)
+  // Type 2 16A domestic: 0, 1800, 10A/16A
+  // Type 2 16A CEE blue: 0, 1800, 16A/16A
+  // Type 2 32A CEE blue: 0, 1800,  8A/16A/20A/32A
   g_PlugType = 2;
-#if defined(ECC_32A)
-  g_PlugAmps = 32;
-#else // 
-  g_PlugAmps = 16;
-#endif // ECC_32A
-  g_BtnPressed = 1800;
-
+  #if defined(ECC_32A)
+    g_CircuitRating = 32;
+    g_ContinuousLoad = 32;
+  #else
+    g_CircuitRating = 16;
+    #if defined(ECC_16A_DOMESTIC)
+      g_ContinuousLoad = 10; // EU: 10A
+    #else
+      g_ContinuousLoad = 16;
+    #endif
+  #endif
+  g_ButtonPressed = 1800;
 #else // ECC_TYPE_1
+  // Type 1 16A domestic: 0, 1200, 13A/16A
+  // Type 1 16A CEE blue: 0, 1200, 16A/16A
+  // Type 1 32A CEE blue: 0, 1200,  8A/16A/20A/32A
   g_PlugType = 1;
-#if defined(ECC_32A)
-  g_PlugAmps = 32;
-#else
-  g_PlugAmps = 16;
+  #if defined(ECC_32A)
+    g_CircuitRating = 32;
+    g_ContinuousLoad = 32;
+  #else
+    g_CircuitRating = 16;
+    #if defined(ECC_16A_DOMESTIC)
+      g_ContinuousLoad = 13; // US: a continuous load = 80% of the circuit rating
+    #else
+      g_ContinuousLoad = 16;
+    #endif
+  #endif
+  g_ButtonPressed = 1200;
 #endif
-  g_BtnPressed = 1200;
-#endif
-  Serial.print(F("OpenEVSE based Emergency Charging Cable "));
-  Serial.print(g_PlugType == 0 ? F("GB/T") : g_PlugType == 1 ? F("Type 1") : F("Type 2"));
-  Serial.print(F(", "));
-  Serial.print(g_PlugAmps);
-  Serial.print(F("A "));
-  if (g_PlugAmps == 16) {
-#if defined(ECC_16A_DOMESTIC)
-    Serial.print(F("domestic"));
-#else
-    Serial.print(F("CEE blue"));
-#endif
+  printf("OpenEVSE based Emergency Charging Cable %s, %dA ", g_PlugType == 0 ? "GB/T" : g_PlugType == 2 ? "Type 2" : "Type 1", g_CircuitRating);
+  if ((g_CircuitRating == 32) || (g_CircuitRating == 16 && g_ContinuousLoad == 16)) {
+    printf("CEE blue, adjustable ");
   }
-  Serial.println(F(" plug"));
+  if (g_CircuitRating == 32) {
+    printf("8A/16A/20A/%uA\n", g_CircuitRating);
+  }
+  else if (g_CircuitRating == 16 && g_ContinuousLoad == 16) {
+    printf("%uA/%uA\n", g_PlugType == 0 ? 8 : g_PlugType == 2 ? 10 : 13, g_CircuitRating);
+  }
+  else if (g_CircuitRating == 16 && g_ContinuousLoad < 16) {
+    printf("domestic, fixed %uA\n", g_ContinuousLoad);
+  }
+  printf("Build enviroment: %s\n", ESCAPEQUOTE(BUILD_ENV_NAME));
+  printf("Build date: %s %s\n", __DATE__, __TIME__);
 
   open_evse_setup();
 }
